@@ -1,0 +1,47 @@
+#!/bin/bash -eu
+
+build_ndk_http_module() {
+  build_module "$1" 'ndk_http_module' 'vision5/ngx_devel_kit'
+}
+
+build_set_misc_module() {
+  build_module "$1" 'ngx_http_set_misc_module' 'openresty/set-misc-nginx-module' 'vision5/ngx_devel_kit'
+}
+
+build_module() {
+  local NGINX_VERSION=${1:-}
+  local MODULE_NAME=${2:-}
+  local MODULE_REPO=${3:-}
+  local GITHUB_REPOS_TO_CLONE=${4:-}
+  local CONTAINER_NAME=clarakm-nginx-${MODULE_NAME}
+  local OUT_DIR=./dist
+
+  if [[ -z "${NGINX_VERSION}" ]]; then
+    echo "NGINX version is required as the first argument."
+    exit 1
+  elif [[ -z "${MODULE_NAME}" ]]; then
+    echo "Module name is required as the second argument."
+    exit 1
+  elif [[ -z "${MODULE_REPO}" ]]; then
+    echo "Module repo is required as the third argument."
+    exit 1
+  else
+    docker buildx build \
+      --platform linux/amd64 \
+      --build-arg "NGINX_VERSION=${NGINX_VERSION}" \
+      --build-arg "MODULE_NAME=${MODULE_NAME}" \
+      --build-arg "MODULE_REPO=${MODULE_REPO}" \
+      --build-arg "GITHUB_REPOS_TO_CLONE=${GITHUB_REPOS_TO_CLONE}" \
+      -t ${CONTAINER_NAME}:${NGINX_VERSION} \
+      .
+
+    trap "docker rm -f ${CONTAINER_NAME} >/dev/null 2>&1 || true" 0
+
+    docker create --name ${CONTAINER_NAME} ${CONTAINER_NAME}:${NGINX_VERSION}
+
+    mkdir -p ${OUT_DIR}
+    docker cp ${CONTAINER_NAME}:/${MODULE_NAME}.so.tgz ${OUT_DIR}/${MODULE_NAME}_nginx-${NGINX_VERSION}.so.tgz
+  fi
+}
+
+$@
